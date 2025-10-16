@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>紙本教案數獨產生器 (進階版)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+        }
+        
+        /* A4 紙張樣式 */
+        .a4-page {
+            width: 210mm;
+            height: 297mm; /* 使用固定高度確保一致性 */
+            padding: 15mm; 
+            margin: 1rem auto;
+            background: white;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            page-break-after: always;
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box;
+        }
+        
+        .a4-page:last-child {
+            page-break-after: avoid;
+        }
+        
+        /* 數獨網格容器 (改為 Flexbox) */
+        .sudoku-container {
+            display: flex;
+            flex-wrap: wrap;
+            flex-grow: 1;
+            align-content: flex-start;
+            /* 使用負邊距來抵銷 wrapper 的 padding，讓內容能貼齊頁面邊距 */
+            margin: -5mm; 
+        }
+
+        /* 數獨包裝器 (固定大小的格子) */
+        .sudoku-wrapper {
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box;
+            padding: 5mm; /* 用 padding 取代 gap 來製造間距 */
+        }
+        
+        /* 為不同尺寸定義固定的百分比大小 */
+        .wrapper-size-4 { width: 50%; height: 33.333%; }
+        .wrapper-size-6 { width: 50%; height: 50%; }
+        .wrapper-size-9 { width: 100%; height: 50%; }
+
+        /* 數獨網格本身 */
+        .sudoku-grid {
+            display: grid;
+            border: 3px solid black;
+            aspect-ratio: 1 / 1;
+            margin: auto;
+            /* 確保網格在任何情況下都不會超出其容器 */
+            max-width: 100%;
+            max-height: 100%;
+        }
+        
+        .sudoku-grid .cell {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border: 1px solid #ccc;
+            font-weight: bold;
+            background-color: #fff;
+        }
+        
+        /* 4x4 粗線 */
+        .grid-4x4 .cell:nth-child(2n) { border-right-width: 2px; border-right-color: black; }
+        .grid-4x4 .cell:nth-child(4n) { border-right-width: 1px; border-right-color: #ccc; }
+        .grid-4x4 .row-2 .cell { border-bottom-width: 2px; border-bottom-color: black; }
+        
+        /* 6x6 粗線 */
+        .grid-6x6 .cell:nth-child(3n) { border-right-width: 2px; border-right-color: black; }
+        .grid-6x6 .cell:nth-child(6n) { border-right-width: 1px; border-right-color: #ccc; }
+        .grid-6x6 .row-2 .cell, .grid-6x6 .row-4 .cell { border-bottom-width: 2px; border-bottom-color: black; }
+
+        /* 9x9 粗線 */
+        .grid-9x9 .cell:nth-child(3n) { border-right-width: 2px; border-right-color: black; }
+        .grid-9x9 .cell:nth-child(9n) { border-right-width: 1px; border-right-color: #ccc; }
+        .grid-9x9 .row-3 .cell, .grid-9x9 .row-6 .cell { border-bottom-width: 2px; border-bottom-color: black; }
+        
+        .sudoku-title {
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+            text-align: center;
+            flex-shrink: 0; /* 防止標題被壓縮 */
+        }
+
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border-left-color: #fff;
+            animation: spin 1s ease infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* 列印時的樣式 */
+        @media print {
+            body {
+                background-color: #fff;
+                margin: 0;
+            }
+            #controls, #header, #footer {
+                display: none;
+            }
+            .a4-page {
+                margin: 0;
+                box-shadow: none;
+                border: none;
+                height: 297mm;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+
+    <header id="header" class="bg-white shadow-md">
+        <div class="max-w-7xl mx-auto p-6">
+            <h1 class="text-3xl font-bold text-gray-800">紙本教案數獨產生器 (穩定版)</h1>
+            <p class="text-gray-600 mt-2">採用全新排版引擎，確保版面絕對穩定。</p>
+        </div>
+    </header>
+    
+    <main class="max-w-7xl mx-auto p-6">
+        <!-- 控制項 -->
+        <div id="controls" class="bg-white p-6 rounded-lg shadow-md mb-8 flex flex-col gap-6">
+            <!-- Row 1: 基本設定 -->
+            <fieldset class="border-t border-gray-200 pt-4">
+                <legend class="text-lg font-medium text-gray-900 mb-2">基本設定</legend>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                        <label for="size" class="block text-sm font-medium text-gray-700">尺寸</label>
+                        <select id="size" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                            <option value="4" selected>4x4 (每頁 6 份)</option>
+                            <option value="6">6x6 (每頁 4 份)</option>
+                            <option value="9">9x9 (每頁 2 份)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="difficulty" class="block text-sm font-medium text-gray-700">難度</label>
+                        <select id="difficulty" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                            <option value="easy">簡易思考版</option>
+                            <option value="hard">深度思考版</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="pages" class="block text-sm font-medium text-gray-700">頁數</label>
+                        <input type="number" id="pages" value="1" min="1" max="20" class="mt-1 block w-full pl-3 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    </div>
+                </div>
+            </fieldset>
+
+            <!-- Row 2: 版面設定 -->
+            <fieldset class="border-t border-gray-200 pt-4">
+                <legend class="text-lg font-medium text-gray-900 mb-2">版面與字體 (即時預覽)</legend>
+                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
+                    
+                    <!-- Title Font Size -->
+                    <div class="slider-control">
+                        <label for="titleFontSize" class="block text-sm font-medium text-gray-700">標題大小 (pt)</label>
+                        <div class="flex items-center gap-4 mt-1">
+                            <input type="range" id="titleFontSizeSlider" min="10" max="72" value="24" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                            <input type="number" id="titleFontSize" value="24" min="10" max="72" class="w-20 pl-2 py-1 border border-gray-300 rounded-md shadow-sm sm:text-sm">
+                        </div>
+                    </div>
+
+                    <!-- Subtitle Font Size -->
+                    <div class="slider-control">
+                        <label for="sudokuTitleSize" class="block text-sm font-medium text-gray-700">小標題大小 (pt)</label>
+                        <div class="flex items-center gap-4 mt-1">
+                            <input type="range" id="sudokuTitleSizeSlider" min="8" max="32" value="16" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                            <input type="number" id="sudokuTitleSize" value="16" min="8" max="32" class="w-20 pl-2 py-1 border border-gray-300 rounded-md shadow-sm sm:text-sm">
+                        </div>
+                    </div>
+                    
+                    <!-- Number Font Size -->
+                    <div class="slider-control">
+                        <label for="sudokuNumberSize" class="block text-sm font-medium text-gray-700">數獨數字大小 (pt)</label>
+                        <div class="flex items-center gap-4 mt-1">
+                            <input type="range" id="sudokuNumberSizeSlider" min="8" max="48" value="30" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                            <input type="number" id="sudokuNumberSize" value="30" min="8" max="48" class="w-20 pl-2 py-1 border border-gray-300 rounded-md shadow-sm sm:text-sm">
+                        </div>
+                    </div>
+                </div>
+            </fieldset>
+
+            <!-- Row 3: 產生設定 -->
+            <fieldset class="border-t border-gray-200 pt-4">
+                <legend class="text-lg font-medium text-gray-900 mb-2">輸出設定</legend>
+                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                     <div>
+                        <label for="pageTitle" class="block text-sm font-medium text-gray-700">自訂頁面標題</label>
+                        <input type="text" id="pageTitle" value="數獨練習" class="mt-1 block w-full pl-3 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    </div>
+                    <div>
+                        <label for="answerMode" class="block text-sm font-medium text-gray-700">解答本模式</label>
+                        <select id="answerMode" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                            <option value="none">不產生解答</option>
+                            <option value="interleaved">題目後緊跟解答頁</option>
+                            <option value="appended" selected>所有題目後附解答本</option>
+                        </select>
+                    </div>
+                </div>
+            </fieldset>
+
+            <!-- Row 4: Action Buttons -->
+            <div class="border-t border-gray-200 pt-4 flex flex-col sm:flex-row items-center justify-center gap-4">
+               <button id="generateBtn" class="w-full sm:w-auto bg-indigo-600 text-white font-bold py-2 px-6 rounded-md hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2">
+                   <span id="generateBtnText">產生題目</span>
+                   <div id="spinner" class="spinner hidden"></div>
+               </button>
+               <button id="printBtn" class="w-full sm:w-auto bg-green-600 text-white font-bold py-2 px-6 rounded-md hover:bg-green-700 transition-colors hidden">列印 / 存成 PDF</button>
+            </div>
+        </div>
+        
+        <!-- 輸出區域 -->
+        <div id="output">
+             <div class="text-center text-gray-500 py-16 bg-white rounded-lg shadow-md">
+                <p>請設定好選項後，點擊「產生題目」按鈕。</p>
+                <p class="text-sm mt-2">您可以自訂標題、字體大小與版面配置。</p>
+            </div>
+        </div>
+    </main>
+    
+    <footer id="footer" class="text-center py-4">
+        <p class="text-gray-500 text-sm">由 Gemini 製作</p>
+    </footer>
+
+    <script>
+        const generateBtn = document.getElementById('generateBtn');
+        const printBtn = document.getElementById('printBtn');
+        const output = document.getElementById('output');
+        const generateBtnText = document.getElementById('generateBtnText');
+        const spinner = document.getElementById('spinner');
+
+        // --- Live Preview & Linked Controls ---
+        const sizeSelect = document.getElementById('size');
+        const controls = [
+            { id: 'titleFontSize', sliderId: 'titleFontSizeSlider' },
+            { id: 'sudokuTitleSize', sliderId: 'sudokuTitleSizeSlider' },
+            { id: 'sudokuNumberSize', sliderId: 'sudokuNumberSizeSlider' },
+        ];
+
+        function initLinkedControls(inputId, sliderId) {
+            const input = document.getElementById(inputId);
+            const slider = document.getElementById(sliderId);
+
+            input.addEventListener('input', () => {
+                slider.value = input.value;
+                updatePreviewStyles();
+            });
+            slider.addEventListener('input', () => {
+                input.value = slider.value;
+                updatePreviewStyles();
+            });
+        }
+        
+        controls.forEach(control => initLinkedControls(control.id, control.sliderId));
+
+        sizeSelect.addEventListener('change', () => {
+            const size = parseInt(sizeSelect.value);
+            const numberSizeInput = document.getElementById('sudokuNumberSize');
+            const numberSizeSlider = document.getElementById('sudokuNumberSizeSlider');
+            if (size === 4) {
+                numberSizeInput.value = 30;
+            } else if (size === 6) {
+                numberSizeInput.value = 24;
+            } else if (size === 9) {
+                numberSizeInput.value = 18;
+            }
+            numberSizeSlider.value = numberSizeInput.value;
+            updatePreviewStyles();
+        });
+
+        function updatePreviewStyles() {
+            const styles = {
+                titleFontSize: document.getElementById('titleFontSize').value,
+                sudokuTitleSize: document.getElementById('sudokuTitleSize').value,
+                sudokuNumberSize: document.getElementById('sudokuNumberSize').value,
+            };
+
+            document.querySelectorAll('.a4-page h2').forEach(title => {
+                title.style.fontSize = `${styles.titleFontSize}pt`;
+            });
+            document.querySelectorAll('.sudoku-title').forEach(title => {
+                title.style.fontSize = `${styles.sudokuTitleSize}pt`;
+            });
+            document.querySelectorAll('.sudoku-grid .cell').forEach(cell => {
+                cell.style.fontSize = `${styles.sudokuNumberSize}pt`;
+            });
+        }
+        
+        generateBtn.addEventListener('click', () => {
+            generateBtn.disabled = true;
+            generateBtnText.textContent = '產生中...';
+            spinner.classList.remove('hidden');
+            printBtn.classList.add('hidden');
+            output.innerHTML = '';
+
+            setTimeout(() => {
+                const settings = {
+                    size: parseInt(document.getElementById('size').value),
+                    difficulty: document.getElementById('difficulty').value,
+                    pages: parseInt(document.getElementById('pages').value),
+                    pageTitle: document.getElementById('pageTitle').value,
+                    answerMode: document.getElementById('answerMode').value,
+                    titleFontSize: document.getElementById('titleFontSize').value,
+                    sudokuTitleSize: document.getElementById('sudokuTitleSize').value,
+                    sudokuNumberSize: document.getElementById('sudokuNumberSize').value,
+                };
+            
+                const puzzlesPerPageMap = { 4: 6, 6: 4, 9: 2 };
+                const puzzlesPerPage = puzzlesPerPageMap[settings.size];
+                const totalPuzzles = settings.pages * puzzlesPerPage;
+
+                const allPuzzles = [];
+                for(let i = 0; i < totalPuzzles; i++) {
+                    allPuzzles.push(createSudoku(settings.size, settings.difficulty));
+                }
+                
+                // --- Page Rendering Logic ---
+                if (settings.answerMode === 'interleaved') {
+                    for (let p = 0; p < settings.pages; p++) {
+                        const puzzlesForPage = allPuzzles.slice(p * puzzlesPerPage, (p + 1) * puzzlesPerPage);
+                        output.appendChild(renderPage(puzzlesForPage, settings, false, p + 1));
+                        output.appendChild(renderPage(puzzlesForPage, settings, true, p + 1));
+                    }
+                } else { // 'appended' or 'none'
+                    for (let p = 0; p < settings.pages; p++) {
+                        const puzzlesForPage = allPuzzles.slice(p * puzzlesPerPage, (p + 1) * puzzlesPerPage);
+                        output.appendChild(renderPage(puzzlesForPage, settings, false, p + 1));
+                    }
+                    if (settings.answerMode === 'appended') {
+                         for (let p = 0; p < settings.pages; p++) {
+                            const puzzlesForPage = allPuzzles.slice(p * puzzlesPerPage, (p + 1) * puzzlesPerPage);
+                            output.appendChild(renderPage(puzzlesForPage, settings, true, p + 1));
+                        }
+                    }
+                }
+                
+                printBtn.classList.remove('hidden');
+                
+                updatePreviewStyles();
+                
+                generateBtn.disabled = false;
+                generateBtnText.textContent = '產生題目';
+                spinner.classList.add('hidden');
+            }, 10);
+        });
+        
+        printBtn.addEventListener('click', () => { window.print(); });
+
+        function toChineseNumber(num) {
+            const numerals = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九", "十", "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十"];
+            if (num > 0 && num < numerals.length) {
+                return numerals[num];
+            }
+            return num.toString();
+        }
+
+        function renderPage(puzzlesData, settings, isAnswerPage, pageNumber) {
+            const page = document.createElement('div');
+            page.className = 'a4-page';
+
+            if (settings.pageTitle) {
+                const titleEl = document.createElement('h2');
+                const titleText = isAnswerPage ? `${settings.pageTitle} - 解答` : settings.pageTitle;
+                titleEl.textContent = `${titleText} (第${toChineseNumber(pageNumber)}版)`;
+                titleEl.style.fontSize = `${settings.titleFontSize}pt`;
+                titleEl.style.textAlign = 'center';
+                titleEl.style.marginBottom = '1rem';
+                titleEl.style.flexShrink = '0';
+                page.appendChild(titleEl);
+            }
+
+            const container = document.createElement('div');
+            container.className = 'sudoku-container';
+            
+            puzzlesData.forEach((data, i) => {
+                const index = i + 1; // Reset puzzle number on each page
+                const puzzleElement = renderSudoku(
+                    isAnswerPage ? data.solution : data.puzzle,
+                    isAnswerPage ? data.puzzle : null,
+                    settings, 
+                    `第 ${index} 題`
+                );
+                container.appendChild(puzzleElement);
+            });
+
+            page.appendChild(container);
+            return page;
+        }
+
+        function renderSudoku(grid, originalPuzzle, settings, titleText) {
+            const size = settings.size;
+            const wrapper = document.createElement('div');
+            // 將決定大小的 class 加到 wrapper 上
+            wrapper.className = `sudoku-wrapper wrapper-size-${size}`;
+            
+            const title = document.createElement('div');
+            title.className = 'sudoku-title';
+            title.textContent = titleText;
+            title.style.fontSize = `${settings.sudokuTitleSize}pt`;
+            wrapper.appendChild(title);
+
+            const gridElement = document.createElement('div');
+            gridElement.className = `sudoku-grid grid-${size}x${size}`;
+            gridElement.style.gridTemplateColumns = `repeat(${size}, 1fr)`;
+            
+            for (let r = 0; r < size; r++) {
+                // 不再需要 .row 元素，直接將 cell 放入 grid
+                for (let c = 0; c < size; c++) {
+                    const cell = document.createElement('div');
+                    // 為 4x4, 6x6, 9x9 的 row 加上 class 以便 CSS 選取
+                    if (r === 1) cell.classList.add('row-2');
+                    if (r === 2) cell.classList.add('row-3');
+                    if (r === 3) cell.classList.add('row-4');
+                    if (r === 5) cell.classList.add('row-6');
+                    cell.classList.add('cell');
+
+                    cell.style.fontSize = `${settings.sudokuNumberSize}pt`;
+                    if (grid[r][c] !== 0) {
+                        cell.textContent = grid[r][c];
+                    }
+                    
+                    if (originalPuzzle && originalPuzzle[r][c] === 0) {
+                        cell.style.color = '#D32F2F';
+                    }
+                    gridElement.appendChild(cell);
+                }
+            }
+            
+            wrapper.appendChild(gridElement);
+            return wrapper;
+        }
+        
+        function createSudoku(size, difficulty) {
+            const grid = Array.from({ length: size }, () => Array(size).fill(0));
+            solveSudoku(grid, size);
+            const solution = JSON.parse(JSON.stringify(grid));
+            
+            let holes = getHoleCount(size, difficulty);
+            let p = Array.from({ length: size * size }, (_, i) => i);
+            shuffle(p);
+            
+            while (holes > 0 && p.length > 0) {
+                const pos = p.pop();
+                const r = Math.floor(pos / size);
+                const c = pos % size;
+                
+                if (grid[r][c] !== 0) {
+                    const temp = grid[r][c];
+                    grid[r][c] = 0;
+                    if (!hasUniqueSolution(JSON.parse(JSON.stringify(grid)), size)) {
+                         grid[r][c] = temp;
+                    } else {
+                        holes--;
+                    }
+                }
+            }
+            return { puzzle: grid, solution: solution };
+        }
+
+        function getHoleCount(size, difficulty) {
+            const counts = {
+                4: { easy: 6, hard: 9 },
+                6: { easy: 15, hard: 22 },
+                9: { easy: 40, hard: 50 }
+            };
+            return counts[size][difficulty];
+        }
+
+        function solveSudoku(grid, size) {
+            const empty = findEmpty(grid, size);
+            if (!empty) return true;
+            const [row, col] = empty;
+            const nums = shuffle(Array.from({ length: size }, (_, i) => i + 1));
+            for (const num of nums) {
+                if (isValid(grid, row, col, num, size)) {
+                    grid[row][col] = num;
+                    if (solveSudoku(grid, size)) return true;
+                    grid[row][col] = 0;
+                }
+            }
+            return false;
+        }
+        
+        function hasUniqueSolution(grid, size) {
+            let solutions = 0;
+            function countSolutions(g) {
+                if (solutions > 1) return;
+                const empty = findEmpty(g, size);
+                if (!empty) {
+                    solutions++;
+                    return;
+                }
+                const [row, col] = empty;
+                for (let num = 1; num <= size; num++) {
+                    if (isValid(g, row, col, num, size)) {
+                        g[row][col] = num;
+                        countSolutions(g);
+                        g[row][col] = 0;
+                    }
+                }
+            }
+            countSolutions(grid);
+            return solutions === 1;
+        }
+
+        function findEmpty(grid, size) {
+            for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) if (grid[r][c] === 0) return [r, c];
+            return null;
+        }
+
+        function isValid(grid, row, col, num, size) {
+            for (let i = 0; i < size; i++) if (grid[row][i] === num || grid[i][col] === num) return false;
+            let boxR, boxC;
+            if (size == 6) { boxR = 2; boxC = 3; } else { boxR = boxC = Math.round(Math.sqrt(size)); }
+            const startRow = row - row % boxR, startCol = col - col % boxC;
+            for (let r = 0; r < boxR; r++) for (let c = 0; c < boxC; c++) if (grid[startRow + r][startCol + c] === num) return false;
+            return true;
+        }
+        
+        function shuffle(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+    </script>
+</body>
+</html>
+
