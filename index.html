@@ -33,52 +33,45 @@
             gap: 10mm;
         }
         
-        /* --- START: ROBUST SUDOKU GRID STYLES --- */
+        /* Sudoku Grid Styles */
         .sudoku-grid {
             border-collapse: collapse;
+            border: 3px solid #111827; /* gray-900 */
         }
         .sudoku-grid td {
-            border: 1px solid #9ca3af; /* Default thin border for all sides */
-            padding: 0; /* Critical for inner div to fill the cell */
-        }
-        /* This inner div is the key to fixing the PDF rendering issue */
-        .cell-content {
-            width: 100%;
-            height: 100%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            border: 1px solid #9ca3af; /* gray-400 */
+            text-align: center;
             font-size: 1.5rem;
             font-weight: 500;
+            vertical-align: middle;
         }
         .sudoku-grid td.subgrid-bg {
             background-color: #f3f4f6; /* gray-100 */
         }
 
-        /* Common Outer Borders - Applied to all grid sizes */
-        .sudoku-grid tr:first-child td { border-top: 3px solid #111827; }
-        .sudoku-grid tr td:first-child { border-left: 3px solid #111827; }
-        .sudoku-grid tr td:last-child { border-right: 3px solid #111827; }
-        .sudoku-grid tr:last-child td { border-bottom: 3px solid #111827; }
-
         /* Subgrid Borders for 4x4 */
-        .grid-4x4 tr:nth-child(2n) td { border-bottom: 2px solid #111827; }
-        .grid-4x4 tr td:nth-child(2n) { border-right: 2px solid #111827; }
+        .grid-4x4 td:nth-child(2n) { border-right: 2px solid #111827; }
+        .grid-4x4 tr:nth-child(2n) { border-bottom: 2px solid #111827; }
+        .grid-4x4 td:last-child { border-right: 3px solid #111827; }
+        .grid-4x4 tr:last-child { border-bottom: 3px solid #111827; }
         .grid-4x4 { width: 60mm; height: 60mm; }
         .grid-4x4 td { width: 15mm; height: 15mm; }
 
         /* Subgrid Borders for 6x6 */
-        .grid-6x6 tr:nth-child(2n) td { border-bottom: 2px solid #111827; }
-        .grid-6x6 tr td:nth-child(3n) { border-right: 2px solid #111827; }
+        .grid-6x6 td:nth-child(3n) { border-right: 2px solid #111827; }
+        .grid-6x6 tr:nth-child(2n) { border-bottom: 2px solid #111827; }
+        .grid-6x6 td:last-child { border-right: 3px solid #111827; }
+        .grid-6x6 tr:last-child { border-bottom: 3px solid #111827; }
         .grid-6x6 { width: 84mm; height: 84mm; }
         .grid-6x6 td { width: 14mm; height: 14mm; }
         
         /* Subgrid Borders for 9x9 */
-        .grid-9x9 tr:nth-child(3n) td { border-bottom: 2px solid #111827; }
-        .grid-9x9 tr td:nth-child(3n) { border-right: 2px solid #111827; }
+        .grid-9x9 td:nth-child(3n) { border-right: 2px solid #111827; }
+        .grid-9x9 tr:nth-child(3n) { border-bottom: 2px solid #111827; }
+        .grid-9x9 td:last-child { border-right: 3px solid #111827; }
+        .grid-9x9 tr:last-child { border-bottom: 3px solid #111827; }
         .grid-9x9 { width: 126mm; height: 126mm; }
         .grid-9x9 td { width: 14mm; height: 14mm; }
-        /* --- END: ROBUST SUDOKU GRID STYLES --- */
 
         .sudoku-container {
             display: flex;
@@ -514,13 +507,10 @@
                 const row = table.insertRow();
                 for (let c = 0; c < size; c++) {
                     const cell = row.insertCell();
-                    const contentDiv = document.createElement('div');
-                    contentDiv.className = 'cell-content';
-                    contentDiv.textContent = cellContentFunc(r, c);
-                    cell.appendChild(contentDiv);
+                    cell.textContent = cellContentFunc(r, c);
                     
                     if (originalPuzzle && originalPuzzle[r][c] === 0) {
-                        contentDiv.classList.add('solved-number');
+                        cell.classList.add('solved-number');
                     }
 
                     const boxRow = Math.floor(r / boxHeight);
