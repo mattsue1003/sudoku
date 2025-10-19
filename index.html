@@ -33,16 +33,23 @@
             gap: 10mm;
         }
         
-        /* --- START: REVISED SUDOKU GRID STYLES --- */
+        /* --- START: ROBUST SUDOKU GRID STYLES --- */
         .sudoku-grid {
             border-collapse: collapse;
         }
         .sudoku-grid td {
             border: 1px solid #9ca3af; /* Default thin border for all sides */
-            text-align: center;
+            padding: 0; /* Critical for inner div to fill the cell */
+        }
+        /* This inner div is the key to fixing the PDF rendering issue */
+        .cell-content {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
             font-size: 1.5rem;
             font-weight: 500;
-            vertical-align: middle;
         }
         .sudoku-grid td.subgrid-bg {
             background-color: #f3f4f6; /* gray-100 */
@@ -71,7 +78,7 @@
         .grid-9x9 tr td:nth-child(3n) { border-right: 2px solid #111827; }
         .grid-9x9 { width: 126mm; height: 126mm; }
         .grid-9x9 td { width: 14mm; height: 14mm; }
-        /* --- END: REVISED SUDOKU GRID STYLES --- */
+        /* --- END: ROBUST SUDOKU GRID STYLES --- */
 
         .sudoku-container {
             display: flex;
@@ -507,10 +514,13 @@
                 const row = table.insertRow();
                 for (let c = 0; c < size; c++) {
                     const cell = row.insertCell();
-                    cell.textContent = cellContentFunc(r, c);
+                    const contentDiv = document.createElement('div');
+                    contentDiv.className = 'cell-content';
+                    contentDiv.textContent = cellContentFunc(r, c);
+                    cell.appendChild(contentDiv);
                     
                     if (originalPuzzle && originalPuzzle[r][c] === 0) {
-                        cell.classList.add('solved-number');
+                        contentDiv.classList.add('solved-number');
                     }
 
                     const boxRow = Math.floor(r / boxHeight);
