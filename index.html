@@ -36,6 +36,7 @@
         /* --- START: ROBUST SUDOKU GRID STYLES --- */
         .sudoku-grid {
             border-collapse: collapse;
+            transition: width 0.2s ease-in-out, height 0.2s ease-in-out;
         }
         .sudoku-grid td {
             border: 1px solid #9ca3af; /* Default thin border for all sides */
@@ -50,6 +51,7 @@
             align-items: center;
             font-size: 1.5rem;
             font-weight: 500;
+            transition: font-size 0.2s ease-in-out;
         }
         .sudoku-grid td.subgrid-bg {
             background-color: #f3f4f6; /* gray-100 */
@@ -84,7 +86,6 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            transition: transform 0.2s ease-in-out;
         }
         
         .sudoku-title {
@@ -356,6 +357,13 @@
         const generateAnswersCheckbox = document.getElementById('generate-answers');
         const answerPlacementOptions = document.getElementById('answer-placement-options');
         
+        // Base sizes for robust scaling
+        const baseSizes = {
+            4: { containerWidth: 60, fontSize: 1.5 }, // in mm and rem
+            6: { containerWidth: 84, fontSize: 1.5 },
+            9: { containerWidth: 126, fontSize: 1.4 }
+        };
+        
         // --- Event Listeners ---
         titleSizeSlider.addEventListener('input', applyLiveStyleChanges);
         sudokuScaleSlider.addEventListener('input', applyLiveStyleChanges);
@@ -401,10 +409,10 @@
             try {
                 for (let i = 0; i < pages.length; i++) {
                     const page = pages[i];
-                    const canvas = await html2canvas(page, { scale: 2, useCORS: true });
-                    const imgData = canvas.toDataURL('image/png');
+                    const canvas = await html2canvas(page, { scale: 3, useCORS: true }); // Increased scale for better quality
+                    const imgData = canvas.toDataURL('image/png', 1.0); // Use full quality PNG
                     if (i > 0) pdf.addPage();
-                    pdf.addImage(imgData, 'PNG', 0, 0, pdf.internal.pageSize.getWidth(), pdf.internal.pageSize.getHeight(), undefined, 'NONE');
+                    pdf.addImage(imgData, 'PNG', 0, 0, pdf.internal.pageSize.getWidth(), pdf.internal.pageSize.getHeight(), undefined, 'FAST');
                 }
                 pdf.save('sudoku_puzzles.pdf');
             } catch (error) {
@@ -506,6 +514,7 @@
         function createSudokuTable(size, cellContentFunc, customClass = '', originalPuzzle = null) {
             const table = document.createElement('table');
             table.className = `sudoku-grid grid-${size}x${size} ${customClass}`;
+            table.dataset.size = size; // Add data attribute for scaling
             let boxHeight, boxWidth;
             if (size === 6) { [boxHeight, boxWidth] = [2, 3]; } 
             else { const sqrtSize = Math.sqrt(size); [boxHeight, boxWidth] = [sqrtSize, sqrtSize]; }
@@ -556,9 +565,24 @@
                 }
             });
 
-            printableArea.querySelectorAll('.sudoku-container').forEach(container => {
-                container.style.transform = `scale(${sudokuScale / 100})`;
+            // --- START: New Scaling Logic ---
+            const scaleFactor = sudokuScale / 100;
+            printableArea.querySelectorAll('.sudoku-grid').forEach(grid => {
+                const size = parseInt(grid.dataset.size);
+                if (baseSizes[size]) {
+                    const base = baseSizes[size];
+                    const newWidth = base.containerWidth * scaleFactor;
+                    const newFontSize = base.fontSize * scaleFactor;
+                    
+                    grid.style.width = `${newWidth}mm`;
+                    grid.style.height = `${newWidth}mm`;
+                    
+                    grid.querySelectorAll('.cell-content').forEach(cell => {
+                        cell.style.fontSize = `${newFontSize}rem`;
+                    });
+                }
             });
+            // --- END: New Scaling Logic ---
         }
     });
     </script>
